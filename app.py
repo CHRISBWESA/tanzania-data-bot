@@ -8,12 +8,12 @@ from sklearn.metrics.pairwise import cosine_similarity # type: ignore
 import numpy as np # type: ignore
 
 # -----------------------------
-# Page config
+# Page Config
 # -----------------------------
 st.set_page_config(page_title="🇹🇿 TANZANIA DATA BOT", page_icon="🤖", layout="wide")
 
 # -----------------------------
-# Initialize embeddings for cosine similarity
+# Embeddings
 # -----------------------------
 embedder = SentenceTransformer("all-MiniLM-L6-v2")
 
@@ -22,14 +22,37 @@ embedder = SentenceTransformer("all-MiniLM-L6-v2")
 # -----------------------------
 st.markdown("""
 <style>
+/* Page background */
 .stApp { background: linear-gradient(120deg, #e6f2ff, #ffffff); }
-.chat-bubble-user { background-color: #007bff; color: white; padding: 10px;
-                    border-radius: 15px; max-width: 70%; margin-bottom: 10px; float:right; clear:both;}
-.chat-bubble-assistant { background-color: #f1f0f0; padding: 10px;
-                        border-radius: 15px; max-width: 70%; margin-bottom: 10px; float:left; clear:both;}
-.title { text-align: center; font-size: 2.2em; font-weight: bold; color: #004080; position: sticky; top: 0; z-index: 1000; background: linear-gradient(120deg, #e6f2ff, #ffffff); padding: 10px;}
-.sidebar-header { font-weight: bold; font-size: 1.2em; }
-.chart-container { max-height: 400px; overflow-y: auto; margin-bottom: 10px;}
+
+/* Chat bubbles */
+.chat-bubble-user {
+    background-color: #004080; color: white; padding: 12px;
+    border-radius: 18px; max-width: 70%; margin-bottom: 10px;
+    float:right; clear:both; font-size: 0.95em;
+}
+.chat-bubble-assistant {
+    background-color: #dbe6f1; color: #004080; padding: 12px;
+    border-radius: 18px; max-width: 70%; margin-bottom: 10px;
+    float:left; clear:both; font-size: 0.95em;
+}
+
+/* Sticky header */
+.title {
+    text-align: center; font-size: 2.2em; font-weight: bold;
+    color: white; position: sticky; top: 0; z-index: 1000;
+    background: linear-gradient(120deg, #004080, #007bff);
+    padding: 12px; border-radius: 0 0 15px 15px;
+}
+
+/* Sidebar headers */
+.sidebar-header { font-weight: bold; font-size: 1.2em; margin-top: 15px; }
+
+/* Charts container */
+.chart-container { max-height: 400px; overflow-y: auto; margin-bottom: 15px; }
+
+/* Footer */
+.footer { text-align:center; color: gray; font-size:0.9em; margin-top:20px;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -37,7 +60,7 @@ st.markdown("""
 # Sticky Title
 # -----------------------------
 st.markdown('<div class="title">🤖 TANZANIA DATA BOT</div>', unsafe_allow_html=True)
-st.write("Ask questions about Tanzania's statistics or request charts comparing data.")
+st.write("Ask questions about Tanzania's statistics or request visual comparisons across regions.")
 
 # -----------------------------
 # Sidebar
@@ -79,7 +102,7 @@ for role, msg in st.session_state.history:
     st.markdown(f"<div class='{style}'>{msg}</div>", unsafe_allow_html=True)
 
 # -----------------------------
-# Example dataset for charts
+# Sample dataset for charts
 # -----------------------------
 DATA = {
     "Iringa": 1500000,
@@ -88,14 +111,15 @@ DATA = {
     "Dar es Salaam": 5000000,
     "Dodoma": 3000000
 }
-
 CHART_HISTORY = st.session_state.get("chart_history", [])
 
 # -----------------------------
-# Utility functions
+# Utilities
 # -----------------------------
 def is_greeting(msg: str) -> bool:
-    return any(msg.lower().startswith(g) for g in ["hi","hello","hey","how are you","who are you","what can you do"])
+    return any(msg.lower().startswith(g) for g in [
+        "hi","hello","hey","how are you","who are you","what can you do","how can you assist"
+    ])
 
 def greeting_response(msg: str) -> str:
     import random
@@ -146,7 +170,7 @@ def plot_user_chart(msg: str):
     return "📊 Chart created!"
 
 # -----------------------------
-# User input
+# Handle user input
 # -----------------------------
 user_input = st.chat_input("Type your question here...")
 if user_input:
@@ -183,3 +207,12 @@ if CHART_HISTORY:
             CHART_HISTORY.pop(i)
             st.session_state.chart_history = CHART_HISTORY
             st.experimental_rerun()
+
+# -----------------------------
+# Footer credit
+# -----------------------------
+st.markdown("""
+<div class="footer">
+Created by Chris Bwesa & Fedelika Maxmus
+</div>
+""", unsafe_allow_html=True)
