@@ -83,10 +83,12 @@ with st.sidebar:
                 st.session_state.selected_history = i
 
 # -----------------------------
-# Load & index PDF
+# Load & index multiple PDFs
 # -----------------------------
-with st.spinner("📂 Loading & indexing NBS report..."):
-    load_and_index_pdf("nbs_report.pdf")
+with st.spinner("📂 Loading & indexing NBS reports..."):
+    pdf_files = ["nbs_report.pdf", "additional_report.pdf"]
+    for pdf_file in pdf_files:
+        load_and_index_pdf(pdf_file)
 
 # -----------------------------
 # Multi-turn chat
@@ -141,7 +143,6 @@ def is_chart_request(msg: str) -> bool:
     return any(word in msg.lower() for word in keywords)
 
 def plot_user_chart(msg: str):
-    # Cosine similarity for region matching
     input_vec = embedder.encode([msg])
     region_vecs = embedder.encode(list(DATA.keys()))
     sims = cosine_similarity(input_vec, region_vecs)[0]
@@ -183,8 +184,9 @@ if user_input:
         elif is_chart_request(user_input):
             answer = plot_user_chart(user_input)
         else:
+            # Queries now search across both PDFs
             raw_answer = query_pdf(user_input)
-            answer = f"{raw_answer}\n\n(From NBS Census 2002 & 2012)"
+            answer = f"{raw_answer}\n\n(From NBS Census 2002 & 2012 & additional report)"
 
     st.markdown(f"<div class='chat-bubble-assistant'>{answer}</div>", unsafe_allow_html=True)
     st.session_state.history.append(("assistant", answer))

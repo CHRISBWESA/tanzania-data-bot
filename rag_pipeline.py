@@ -24,9 +24,8 @@ genai.configure(api_key=API_KEY)
 # Globals
 # -----------------------------
 PERSIST_FILE = "pdf_indexed.pkl"
-VECTOR_FILE = "vectorstore.pkl"
-CHUNK_SIZE = 1000
-CHUNK_OVERLAP = 200
+CHUNK_SIZE = 500
+CHUNK_OVERLAP = 100
 
 _vectorstore: Optional[List[dict]] = None
 _embedder = SentenceTransformer("all-MiniLM-L6-v2")
@@ -41,13 +40,14 @@ def _mark_indexed():
     with open(PERSIST_FILE, "wb") as f:
         pickle.dump(True, f)
 
-def load_and_index_pdf(pdf_path: str = "nbs_report.pdf"):
+def load_and_index_pdf(pdf_path: str):
     """
-    Load PDF, split into chunks, embed, store in memory.
+    Load PDF, split into chunks, embed, and store in memory.
+    Accumulates chunks if multiple PDFs are loaded.
     """
     global _vectorstore
-    if _is_indexed() and _vectorstore:
-        return  # already loaded
+    if _vectorstore is None:
+        _vectorstore = []
 
     if not os.path.exists(pdf_path):
         raise FileNotFoundError(f"PDF not found: {pdf_path}")
@@ -61,7 +61,7 @@ def load_and_index_pdf(pdf_path: str = "nbs_report.pdf"):
 
     all_text = "\n".join(full_text).strip()
     if not all_text:
-        raise ValueError("PDF empty, nothing to index.")
+        raise ValueError(f"PDF {pdf_path} is empty, nothing to index.")
 
     # Split into chunks
     chunks = []
@@ -73,14 +73,17 @@ def load_and_index_pdf(pdf_path: str = "nbs_report.pdf"):
 
     # Embed chunks
     embeddings = _embedder.encode(chunks).tolist()
-    _vectorstore = [{"chunk": chunk, "embedding": emb} for chunk, emb in zip(chunks, embeddings)]
+    new_vectorstore = [{"chunk": chunk, "embedding": emb} for chunk, emb in zip(chunks, embeddings)]
+
+    _vectorstore.extend(new_vectorstore)
 
     _mark_indexed()
     print(f"Indexed {len(chunks)} chunks from {pdf_path}")
 
-def query_pdf(question: str, top_k: int = 5) -> str:
+def query_pdf(question: str, top_k: int = 3) -> str:
     """
     Retrieve top chunks using cosine similarity and query Gemini.
+    Searches across all loaded PDFs.
     """
     if not _vectorstore:
         raise RuntimeError("Vectorstore not loaded. Run load_and_index_pdf first.")
@@ -93,10 +96,10 @@ def query_pdf(question: str, top_k: int = 5) -> str:
     context = "\n\n".join([_vectorstore[i]["chunk"] for i in top_idx if sims[i] > 0.4])
 
     if not context:
-        return "I can't find that in the NBS (2002 & 2012) sources."
+        return "I can't find that in the indexed NBS or additional sources."
 
     prompt = f"""
-You are TANZANIA DATA BOT. Answer using ONLY Tanzania National Bureau of Statistics census data (2002 & 2012).
+You are TANZANIA DATA BOT. Answer using ONLY Tanzania National Bureau of Statistics census data (2002 & 2012) and additional provided PDFs.
 Answer briefly and exactly (2-4 sentences). Do NOT add extra info.
 
 Context:
