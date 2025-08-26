@@ -1,0 +1,13 @@
+streamlit
+pdfplumber
+chromadb
+sentence-transformers
+langchain-text-splitters
+google-generativeai
+tqdm
+pandas
+python-dotenv
+plotly
+matplotlib
+seaborn
+wordcloud

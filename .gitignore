@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.env
+.venv/
+.env
+*.pkl
+
+# VSCode
+.vscode/
+
+# Streamlit / local files
+.streamlit/
+
+# Mac / Windows
+.DS_Store
+Thumbs.db
