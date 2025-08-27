@@ -1,106 +1,162 @@
-# rag_pipeline.py
+"""
+RAG pipeline for Tanzania Data Bot
+- Indexes a single Census 2022 PDF
+- Stores embeddings in persistent Chroma DB
+- Supports retrieval-augmented generation
+"""
+
 import os
 import pickle
-import pdfplumber  # type: ignore
-from typing import Optional, List
-from dotenv import load_dotenv # type: ignore
-from tqdm import tqdm # type: ignore
+from typing import List
+import pdfplumber # type: ignore
 from sentence_transformers import SentenceTransformer # type: ignore
-import numpy as np # type: ignore
-
-import google.generativeai as genai  # type: ignore # Gemini
+import chromadb # type: ignore
+import google.generativeai as genai # type: ignore
+from dotenv import load_dotenv # type: ignore
 
 # -----------------------------
-# Load API key
+# Configuration
 # -----------------------------
 load_dotenv()
 API_KEY = os.getenv("GOOGLE_API_KEY")
 if not API_KEY:
     raise ValueError("GOOGLE_API_KEY not set in .env file")
-
 genai.configure(api_key=API_KEY)
+
+# Paths / Settings
+PDF_FILE = "additional_report.pdf"  # only 2022 Census
+CHROMA_DIR = "chroma_db"
+CHROMA_COLLECTION = "census_2022"
+CACHE_FILE = "pdf_indexed.pkl"
+CHUNK_SIZE = 500
+CHUNK_OVERLAP = 100
+TOP_K = 4
+
+# -----------------------------
+# Environment tweaks
+# -----------------------------
+os.environ["CHROMA_TELEMETRY"] = "false"
 
 # -----------------------------
 # Globals
 # -----------------------------
-PERSIST_FILE = "pdf_indexed.pkl"
-CHUNK_SIZE = 500
-CHUNK_OVERLAP = 100
-
-_vectorstore: Optional[List[dict]] = None
 _embedder = SentenceTransformer("all-MiniLM-L6-v2")
+chroma_client = chromadb.PersistentClient(path=CHROMA_DIR)
+collection = chroma_client.get_or_create_collection(
+    name=CHROMA_COLLECTION,
+    metadata={"source": "census_2022"}
+)
 
 # -----------------------------
 # Helpers
 # -----------------------------
 def _is_indexed() -> bool:
-    return os.path.exists(PERSIST_FILE)
+    return os.path.exists(CACHE_FILE) and collection.count() > 0
 
 def _mark_indexed():
-    with open(PERSIST_FILE, "wb") as f:
+    with open(CACHE_FILE, "wb") as f:
         pickle.dump(True, f)
 
-def load_and_index_pdf(pdf_path: str):
-    """
-    Load PDF, split into chunks, embed, and store in memory.
-    Accumulates chunks if multiple PDFs are loaded.
-    """
-    global _vectorstore
-    if _vectorstore is None:
-        _vectorstore = []
-
+def _extract_text_from_pdf(pdf_path: str) -> str:
     if not os.path.exists(pdf_path):
         raise FileNotFoundError(f"PDF not found: {pdf_path}")
-
-    full_text = []
+    pieces: List[str] = []
     with pdfplumber.open(pdf_path) as pdf:
         for page in pdf.pages:
-            txt = page.extract_text()
-            if txt:
-                full_text.append(txt)
+            page_text = page.extract_text()
+            if page_text:
+                pieces.append(page_text)
+    return "\n".join(pieces).strip()
 
-    all_text = "\n".join(full_text).strip()
-    if not all_text:
-        raise ValueError(f"PDF {pdf_path} is empty, nothing to index.")
-
-    # Split into chunks
-    chunks = []
+def _split_text_to_chunks(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> List[str]:
+    if not text:
+        return []
+    chunks: List[str] = []
     start = 0
-    while start < len(all_text):
-        end = min(start + CHUNK_SIZE, len(all_text))
-        chunks.append(all_text[start:end])
-        start += CHUNK_SIZE - CHUNK_OVERLAP
+    L = len(text)
+    while start < L:
+        end = min(start + chunk_size, L)
+        chunks.append(text[start:end])
+        start += chunk_size - overlap
+    return chunks
 
-    # Embed chunks
+# -----------------------------
+# Indexing
+# -----------------------------
+def load_and_index_pdf(force_reindex: bool = False):
+    """Load and index the 2022 Census PDF"""
+    global collection
+    if _is_indexed() and not force_reindex:
+        return
+
+    if force_reindex:
+        try:
+            chroma_client.delete_collection(CHROMA_COLLECTION)
+        except Exception:
+            pass
+        collection = chroma_client.get_or_create_collection(
+            name=CHROMA_COLLECTION, metadata={"source": "census_2022"}
+        )
+
+    print(f"Indexing: {PDF_FILE} ...")
+    text = _extract_text_from_pdf(PDF_FILE)
+    if not text:
+        print(f"Warning: {PDF_FILE} yielded no text, skipping.")
+        return
+
+    chunks = _split_text_to_chunks(text)
     embeddings = _embedder.encode(chunks).tolist()
-    new_vectorstore = [{"chunk": chunk, "embedding": emb} for chunk, emb in zip(chunks, embeddings)]
+    ids = [f"{os.path.basename(PDF_FILE)}_chunk_{i}" for i in range(len(chunks))]
+    metadatas = [{"source": os.path.basename(PDF_FILE), "chunk_index": i} for i in range(len(chunks))]
 
-    _vectorstore.extend(new_vectorstore)
-
+    collection.add(ids=ids, documents=chunks, embeddings=embeddings, metadatas=metadatas)
     _mark_indexed()
-    print(f"Indexed {len(chunks)} chunks from {pdf_path}")
+    print(f"Completed indexing. Total chunks: {len(chunks)}")
 
-def query_pdf(question: str, top_k: int = 3) -> str:
-    """
-    Retrieve top chunks using cosine similarity and query Gemini.
-    Searches across all loaded PDFs.
-    """
-    if not _vectorstore:
-        raise RuntimeError("Vectorstore not loaded. Run load_and_index_pdf first.")
+# ✅ FIX: Wrapper to match app.py import
+def load_and_index_all_pdfs(force_reindex: bool = False):
+    """Wrapper for app.py compatibility (calls load_and_index_pdf)."""
+    return load_and_index_pdf(force_reindex=force_reindex)
 
-    # Embed query
-    q_vec = _embedder.encode([question])
-    chunk_embs = np.array([v["embedding"] for v in _vectorstore])
-    sims = np.dot(chunk_embs, q_vec.T).flatten()
-    top_idx = sims.argsort()[-top_k:][::-1]
-    context = "\n\n".join([_vectorstore[i]["chunk"] for i in top_idx if sims[i] > 0.4])
+# -----------------------------
+# Query
+# -----------------------------
+def query_pdf(question: str, top_k: int = TOP_K, max_context_chars: int = 3000) -> str:
+    if collection.count() == 0:
+        return "No documents indexed. Please ensure the 2022 Census PDF is present."
 
+    q_emb = _embedder.encode(question).tolist()
+    results = collection.query(
+        query_embeddings=[q_emb],
+        n_results=top_k,
+        include=["documents", "metadatas", "distances"]
+    )
+
+    docs = results.get("documents", [[]])[0]
+    metas = results.get("metadatas", [[]])[0]
+    dists = results.get("distances", [[]])[0]
+
+    if not docs:
+        return "I couldn't find relevant information in the 2022 Census. Try rephrasing your question."
+
+    selected_parts = []
+    total_len = 0
+    for doc, meta, dist in zip(docs, metas, dists):
+        if total_len + len(doc) > max_context_chars:
+            break
+        source_tag = meta.get("source", "") if meta else ""
+        snippet = f"[{source_tag}] {doc}" if source_tag else doc
+        selected_parts.append(snippet)
+        total_len += len(doc)
+
+    context = "\n\n".join(selected_parts).strip()
     if not context:
-        return "I can't find that in the indexed NBS or additional sources."
+        return "I couldn't find a focused context for that question."
 
     prompt = f"""
-You are TANZANIA DATA BOT. Answer using ONLY Tanzania National Bureau of Statistics census data (2002 & 2012) and additional provided PDFs.
-Answer briefly and exactly (2-4 sentences). Do NOT add extra info.
+You are TANZANIA DATA BOT. Use ONLY the provided Context (from Census 2022 report).
+If the answer cannot be found in the Context, say you cannot find it in the documents.
+Be concise and exact (2-4 sentences). Do not add unrelated information.
 
 Context:
 {context}
@@ -108,7 +164,33 @@ Context:
 Question: {question}
 Answer:
 """
-    model = genai.GenerativeModel("gemini-1.5-flash")
-    response = model.generate_content(prompt)
 
-    return response.text.strip() if response and response.text else "No answer generated."
+    model = genai.GenerativeModel("gemini-1.5-flash")
+    try:
+        response = model.generate_content(prompt)
+    except Exception:
+        return "There was an error querying the language model. Please try again."
+
+    if response and getattr(response, "text", None):
+        return response.text.strip()
+    return "No answer generated by the model."
+
+# -----------------------------
+# Force reindex
+# -----------------------------
+def force_reindex():
+    try:
+        if os.path.exists(CACHE_FILE):
+            os.remove(CACHE_FILE)
+    except Exception:
+        pass
+    try:
+        chroma_client.delete_collection(CHROMA_COLLECTION)
+    except Exception:
+        pass
+
+    global collection
+    collection = chroma_client.get_or_create_collection(
+        name=CHROMA_COLLECTION, metadata={"source": "census_2022"}
+    )
+    load_and_index_pdf(force_reindex=True)
