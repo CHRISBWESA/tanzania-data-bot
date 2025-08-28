@@ -1,7 +1,7 @@
 """
 RAG pipeline for Tanzania Data Bot
 - Indexes a single Census 2022 PDF
-- Stores embeddings in Chroma (in-memory, no SQLite needed)
+- Stores embeddings in FAISS (no external DB needed)
 - Supports retrieval-augmented generation
 """
 
@@ -9,8 +9,9 @@ import os
 import pickle
 from typing import List
 import pdfplumber  # type: ignore
+import numpy as np  # type: ignore
+import faiss  # type: ignore
 from sentence_transformers import SentenceTransformer  # type: ignore
-import chromadb  # type: ignore
 import google.generativeai as genai  # type: ignore
 from dotenv import load_dotenv  # type: ignore
 
@@ -24,40 +25,24 @@ if not API_KEY:
 genai.configure(api_key=API_KEY)
 
 # Paths / Settings
-PDF_FILE = "additional_report.pdf"  # only 2022 Census
-CHROMA_COLLECTION = "census_2022"
-CACHE_FILE = "pdf_indexed.pkl"
+PDF_FILE = "additional_report.pdf"  # Census 2022 PDF
+INDEX_FILE = "faiss_index.pkl"
+DOCS_FILE = "faiss_docs.pkl"
 CHUNK_SIZE = 500
 CHUNK_OVERLAP = 100
 TOP_K = 4
 
 # -----------------------------
-# Environment tweaks
-# -----------------------------
-os.environ["CHROMA_TELEMETRY"] = "false"
-
-# -----------------------------
 # Globals
 # -----------------------------
 _embedder = SentenceTransformer("all-MiniLM-L6-v2")
+_index = None
+_documents: List[str] = []
 
-# ✅ FIX: Use EphemeralClient (in-memory Chroma) → avoids sqlite3 requirement
-chroma_client = chromadb.EphemeralClient()
-collection = chroma_client.get_or_create_collection(
-    name=CHROMA_COLLECTION,
-    metadata={"source": "census_2022"}
-)
 
 # -----------------------------
 # Helpers
 # -----------------------------
-def _is_indexed() -> bool:
-    return os.path.exists(CACHE_FILE) and collection.count() > 0
-
-def _mark_indexed():
-    with open(CACHE_FILE, "wb") as f:
-        pickle.dump(True, f)
-
 def _extract_text_from_pdf(pdf_path: str) -> str:
     if not os.path.exists(pdf_path):
         raise FileNotFoundError(f"PDF not found: {pdf_path}")
@@ -69,7 +54,10 @@ def _extract_text_from_pdf(pdf_path: str) -> str:
                 pieces.append(page_text)
     return "\n".join(pieces).strip()
 
-def _split_text_to_chunks(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> List[str]:
+
+def _split_text_to_chunks(
+    text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP
+) -> List[str]:
     if not text:
         return []
     chunks: List[str] = []
@@ -81,23 +69,34 @@ def _split_text_to_chunks(text: str, chunk_size: int = CHUNK_SIZE, overlap: int 
         start += chunk_size - overlap
     return chunks
 
+
+def _save_index(index, documents):
+    with open(INDEX_FILE, "wb") as f:
+        pickle.dump(index, f)
+    with open(DOCS_FILE, "wb") as f:
+        pickle.dump(documents, f)
+
+
+def _load_index():
+    global _index, _documents
+    if os.path.exists(INDEX_FILE) and os.path.exists(DOCS_FILE):
+        with open(INDEX_FILE, "rb") as f:
+            _index = pickle.load(f)
+        with open(DOCS_FILE, "rb") as f:
+            _documents = pickle.load(f)
+        return True
+    return False
+
+
 # -----------------------------
 # Indexing
 # -----------------------------
 def load_and_index_pdf(force_reindex: bool = False):
-    """Load and index the 2022 Census PDF"""
-    global collection
-    if _is_indexed() and not force_reindex:
-        return
+    """Load and index the 2022 Census PDF into FAISS"""
+    global _index, _documents
 
-    if force_reindex:
-        try:
-            chroma_client.delete_collection(CHROMA_COLLECTION)
-        except Exception:
-            pass
-        collection = chroma_client.get_or_create_collection(
-            name=CHROMA_COLLECTION, metadata={"source": "census_2022"}
-        )
+    if not force_reindex and _load_index():
+        return
 
     print(f"Indexing: {PDF_FILE} ...")
     text = _extract_text_from_pdf(PDF_FILE)
@@ -106,47 +105,43 @@ def load_and_index_pdf(force_reindex: bool = False):
         return
 
     chunks = _split_text_to_chunks(text)
-    embeddings = _embedder.encode(chunks).tolist()
-    ids = [f"{os.path.basename(PDF_FILE)}_chunk_{i}" for i in range(len(chunks))]
-    metadatas = [{"source": os.path.basename(PDF_FILE), "chunk_index": i} for i in range(len(chunks))]
+    _documents = chunks
+    embeddings = _embedder.encode(chunks).astype("float32")
 
-    collection.add(ids=ids, documents=chunks, embeddings=embeddings, metadatas=metadatas)
-    _mark_indexed()
+    _index = faiss.IndexFlatL2(embeddings.shape[1])
+    _index.add(embeddings)
+
+    _save_index(_index, _documents)
     print(f"Completed indexing. Total chunks: {len(chunks)}")
 
-# ✅ FIX: Wrapper to match app.py import
+
 def load_and_index_all_pdfs(force_reindex: bool = False):
     """Wrapper for app.py compatibility (calls load_and_index_pdf)."""
     return load_and_index_pdf(force_reindex=force_reindex)
+
 
 # -----------------------------
 # Query
 # -----------------------------
 def query_pdf(question: str, top_k: int = TOP_K, max_context_chars: int = 3000) -> str:
-    if collection.count() == 0:
-        return "No documents indexed. Please ensure the 2022 Census PDF is present."
+    global _index, _documents
 
-    q_emb = _embedder.encode(question).tolist()
-    results = collection.query(
-        query_embeddings=[q_emb],
-        n_results=top_k,
-        include=["documents", "metadatas", "distances"]
-    )
+    if _index is None or not _documents:
+        if not _load_index():
+            return "No documents indexed. Please ensure the 2022 Census PDF is present."
 
-    docs = results.get("documents", [[]])[0]
-    metas = results.get("metadatas", [[]])[0]
-    dists = results.get("distances", [[]])[0]
-
-    if not docs:
-        return "I couldn't find relevant information in the 2022 Census. Try rephrasing your question."
+    q_emb = _embedder.encode([question]).astype("float32")
+    D, I = _index.search(q_emb, top_k)
 
     selected_parts = []
     total_len = 0
-    for doc, meta, dist in zip(docs, metas, dists):
+    for idx in I[0]:
+        if idx == -1 or idx >= len(_documents):
+            continue
+        doc = _documents[idx]
         if total_len + len(doc) > max_context_chars:
             break
-        source_tag = meta.get("source", "") if meta else ""
-        snippet = f"[{source_tag}] {doc}" if source_tag else doc
+        snippet = f"[Census2022] {doc}"
         selected_parts.append(snippet)
         total_len += len(doc)
 
@@ -176,22 +171,18 @@ Answer:
         return response.text.strip()
     return "No answer generated by the model."
 
+
 # -----------------------------
 # Force reindex
 # -----------------------------
 def force_reindex():
+    global _index, _documents
     try:
-        if os.path.exists(CACHE_FILE):
-            os.remove(CACHE_FILE)
+        if os.path.exists(INDEX_FILE):
+            os.remove(INDEX_FILE)
+        if os.path.exists(DOCS_FILE):
+            os.remove(DOCS_FILE)
     except Exception:
         pass
-    try:
-        chroma_client.delete_collection(CHROMA_COLLECTION)
-    except Exception:
-        pass
-
-    global collection
-    collection = chroma_client.get_or_create_collection(
-        name=CHROMA_COLLECTION, metadata={"source": "census_2022"}
-    )
+    _index, _documents = None, []
     load_and_index_pdf(force_reindex=True)
