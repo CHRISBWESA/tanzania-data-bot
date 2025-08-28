@@ -1,18 +1,18 @@
 """
 RAG pipeline for Tanzania Data Bot
 - Indexes a single Census 2022 PDF
-- Stores embeddings in persistent Chroma DB
+- Stores embeddings in Chroma (in-memory, no SQLite needed)
 - Supports retrieval-augmented generation
 """
 
 import os
 import pickle
 from typing import List
-import pdfplumber # type: ignore
-from sentence_transformers import SentenceTransformer # type: ignore
-import chromadb # type: ignore
-import google.generativeai as genai # type: ignore
-from dotenv import load_dotenv # type: ignore
+import pdfplumber  # type: ignore
+from sentence_transformers import SentenceTransformer  # type: ignore
+import chromadb  # type: ignore
+import google.generativeai as genai  # type: ignore
+from dotenv import load_dotenv  # type: ignore
 
 # -----------------------------
 # Configuration
@@ -25,7 +25,6 @@ genai.configure(api_key=API_KEY)
 
 # Paths / Settings
 PDF_FILE = "additional_report.pdf"  # only 2022 Census
-CHROMA_DIR = "chroma_db"
 CHROMA_COLLECTION = "census_2022"
 CACHE_FILE = "pdf_indexed.pkl"
 CHUNK_SIZE = 500
@@ -41,7 +40,9 @@ os.environ["CHROMA_TELEMETRY"] = "false"
 # Globals
 # -----------------------------
 _embedder = SentenceTransformer("all-MiniLM-L6-v2")
-chroma_client = chromadb.PersistentClient(path=CHROMA_DIR)
+
+# ✅ FIX: Use EphemeralClient (in-memory Chroma) → avoids sqlite3 requirement
+chroma_client = chromadb.EphemeralClient()
 collection = chroma_client.get_or_create_collection(
     name=CHROMA_COLLECTION,
     metadata={"source": "census_2022"}

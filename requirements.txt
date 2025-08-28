@@ -11,3 +11,4 @@ plotly
 matplotlib
 seaborn
 wordcloud
+pysqlite3-binary
