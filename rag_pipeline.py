@@ -1,188 +1,35 @@
-"""
-RAG pipeline for Tanzania Data Bot
-- Indexes a single Census 2022 PDF
-- Stores embeddings in FAISS (no external DB needed)
-- Supports retrieval-augmented generation
-"""
-
 import os
-import pickle
-from typing import List
-import pdfplumber  # type: ignore
-import numpy as np  # type: ignore
-import faiss  # type: ignore
-from sentence_transformers import SentenceTransformer  # type: ignore
-import google.generativeai as genai  # type: ignore
-from dotenv import load_dotenv  # type: ignore
+from langchain_community.vectorstores import FAISS # type: ignore
+from langchain_community.document_loaders import PyPDFLoader # type: ignore
+from langchain_text_splitters import RecursiveCharacterTextSplitter # type: ignore
+from langchain_openai import OpenAIEmbeddings # type: ignore
 
-# -----------------------------
-# Configuration
-# -----------------------------
-load_dotenv()
-API_KEY = os.getenv("GOOGLE_API_KEY")
-if not API_KEY:
-    raise ValueError("GOOGLE_API_KEY not set in .env file")
-genai.configure(api_key=API_KEY)
+# Function to load and index PDFs
+def load_and_index_all_pdfs(pdf_folder="pdfs", db_path="vectorstore"):
+    if not os.path.exists(pdf_folder):
+        raise FileNotFoundError(f"Folder '{pdf_folder}' does not exist.")
 
-# Paths / Settings
-PDF_FILE = "additional_report.pdf"  # Census 2022 PDF
-INDEX_FILE = "faiss_index.pkl"
-DOCS_FILE = "faiss_docs.pkl"
-CHUNK_SIZE = 500
-CHUNK_OVERLAP = 100
-TOP_K = 4
+    documents = []
+    for filename in os.listdir(pdf_folder):
+        if filename.endswith(".pdf"):
+            loader = PyPDFLoader(os.path.join(pdf_folder, filename))
+            documents.extend(loader.load())
 
-# -----------------------------
-# Globals
-# -----------------------------
-_embedder = SentenceTransformer("all-MiniLM-L6-v2")
-_index = None
-_documents: List[str] = []
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+    splits = text_splitter.split_documents(documents)
+
+    embeddings = OpenAIEmbeddings()
+
+    # Create FAISS index
+    vectorstore = FAISS.from_documents(splits, embeddings)
+
+    # Save index
+    vectorstore.save_local(db_path)
+
+    return vectorstore
 
 
-# -----------------------------
-# Helpers
-# -----------------------------
-def _extract_text_from_pdf(pdf_path: str) -> str:
-    if not os.path.exists(pdf_path):
-        raise FileNotFoundError(f"PDF not found: {pdf_path}")
-    pieces: List[str] = []
-    with pdfplumber.open(pdf_path) as pdf:
-        for page in pdf.pages:
-            page_text = page.extract_text()
-            if page_text:
-                pieces.append(page_text)
-    return "\n".join(pieces).strip()
-
-
-def _split_text_to_chunks(
-    text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP
-) -> List[str]:
-    if not text:
-        return []
-    chunks: List[str] = []
-    start = 0
-    L = len(text)
-    while start < L:
-        end = min(start + chunk_size, L)
-        chunks.append(text[start:end])
-        start += chunk_size - overlap
-    return chunks
-
-
-def _save_index(index, documents):
-    with open(INDEX_FILE, "wb") as f:
-        pickle.dump(index, f)
-    with open(DOCS_FILE, "wb") as f:
-        pickle.dump(documents, f)
-
-
-def _load_index():
-    global _index, _documents
-    if os.path.exists(INDEX_FILE) and os.path.exists(DOCS_FILE):
-        with open(INDEX_FILE, "rb") as f:
-            _index = pickle.load(f)
-        with open(DOCS_FILE, "rb") as f:
-            _documents = pickle.load(f)
-        return True
-    return False
-
-
-# -----------------------------
-# Indexing
-# -----------------------------
-def load_and_index_pdf(force_reindex: bool = False):
-    """Load and index the 2022 Census PDF into FAISS"""
-    global _index, _documents
-
-    if not force_reindex and _load_index():
-        return
-
-    print(f"Indexing: {PDF_FILE} ...")
-    text = _extract_text_from_pdf(PDF_FILE)
-    if not text:
-        print(f"Warning: {PDF_FILE} yielded no text, skipping.")
-        return
-
-    chunks = _split_text_to_chunks(text)
-    _documents = chunks
-    embeddings = _embedder.encode(chunks).astype("float32")
-
-    _index = faiss.IndexFlatL2(embeddings.shape[1])
-    _index.add(embeddings)
-
-    _save_index(_index, _documents)
-    print(f"Completed indexing. Total chunks: {len(chunks)}")
-
-
-def load_and_index_all_pdfs(force_reindex: bool = False):
-    """Wrapper for app.py compatibility (calls load_and_index_pdf)."""
-    return load_and_index_pdf(force_reindex=force_reindex)
-
-
-# -----------------------------
-# Query
-# -----------------------------
-def query_pdf(question: str, top_k: int = TOP_K, max_context_chars: int = 3000) -> str:
-    global _index, _documents
-
-    if _index is None or not _documents:
-        if not _load_index():
-            return "No documents indexed. Please ensure the 2022 Census PDF is present."
-
-    q_emb = _embedder.encode([question]).astype("float32")
-    D, I = _index.search(q_emb, top_k)
-
-    selected_parts = []
-    total_len = 0
-    for idx in I[0]:
-        if idx == -1 or idx >= len(_documents):
-            continue
-        doc = _documents[idx]
-        if total_len + len(doc) > max_context_chars:
-            break
-        snippet = f"[Census2022] {doc}"
-        selected_parts.append(snippet)
-        total_len += len(doc)
-
-    context = "\n\n".join(selected_parts).strip()
-    if not context:
-        return "I couldn't find a focused context for that question."
-
-    prompt = f"""
-You are TANZANIA DATA BOT. Use ONLY the provided Context (from Census 2022 report).
-If the answer cannot be found in the Context, say you cannot find it in the documents.
-Be concise and exact (2-4 sentences). Do not add unrelated information.
-
-Context:
-{context}
-
-Question: {question}
-Answer:
-"""
-
-    model = genai.GenerativeModel("gemini-1.5-flash")
-    try:
-        response = model.generate_content(prompt)
-    except Exception:
-        return "There was an error querying the language model. Please try again."
-
-    if response and getattr(response, "text", None):
-        return response.text.strip()
-    return "No answer generated by the model."
-
-
-# -----------------------------
-# Force reindex
-# -----------------------------
-def force_reindex():
-    global _index, _documents
-    try:
-        if os.path.exists(INDEX_FILE):
-            os.remove(INDEX_FILE)
-        if os.path.exists(DOCS_FILE):
-            os.remove(DOCS_FILE)
-    except Exception:
-        pass
-    _index, _documents = None, []
-    load_and_index_pdf(force_reindex=True)
+# Function to load FAISS vectorstore
+def load_vectorstore(db_path="vectorstore"):
+    embeddings = OpenAIEmbeddings()
+    return FAISS.load_local(db_path, embeddings, allow_dangerous_deserialization=True)
