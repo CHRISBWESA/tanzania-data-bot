@@ -1,32 +1,99 @@
 import streamlit as st # type: ignore
-from rag_pipeline import load_vectorstore
-from langchain.chains import RetrievalQA # type: ignore
-from langchain_openai import ChatOpenAI # type: ignore
+from rag_pipeline import query_census
 
-# Load FAISS vectorstore
-vectorstore = load_vectorstore()
-retriever = vectorstore.as_retriever()
-
-# Initialize LLM
-llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0)
-
-# Setup RetrievalQA
-qa_chain = RetrievalQA.from_chain_type(
-    llm=llm,
-    retriever=retriever,
-    return_source_documents=True
+st.set_page_config(
+    page_title="🇹🇿 Tanzania Data Bot",
+    page_icon="🤖",
+    layout="wide",
 )
 
-st.title("📘 RAG Chatbot")
+# -----------------------------
+# Chat Page Title
+# -----------------------------
+st.markdown("""
+<div style='position:sticky; top:0; background:#fff; z-index:1000; padding:15px; box-shadow:0 2px 5px rgba(0,0,0,0.1);'>
+    <h2>💬 Tanzania Data Bot</h2>
+    <p>Ask me questions about the 2022 Tanzania Census (population & housing).</p>
+</div>
+""", unsafe_allow_html=True)
 
-# Input area with Send button
-user_input = st.text_area("Enter your question:", key="user_input")
-if st.button("Send"):
-    if user_input.strip():
-        response = qa_chain({"query": user_input})
-        st.markdown(f"**Answer:** {response['result']}")
+# -----------------------------
+# Custom CSS for chat
+# -----------------------------
+st.markdown("""
+<style>
+.chat-area {
+    max-height: 70vh;
+    overflow-y: auto;
+    padding: 10px;
+}
+.user-msg {
+    background-color: #4f46e5;
+    color: white;
+    padding: 12px;
+    border-radius: 15px;
+    margin: 6px;
+    max-width: 70%;
+    float: right;
+    clear: both;
+}
+.bot-msg {
+    background-color: #f6f9fc;
+    color: #003366;
+    padding: 12px;
+    border-radius: 15px;
+    margin: 6px;
+    max-width: 70%;
+    float: left;
+    clear: both;
+}
+input:focus {
+    outline: 2px solid #4f46e5;
+    border-radius: 12px;
+}
+</style>
+""", unsafe_allow_html=True)
 
-        # Show sources
-        with st.expander("Sources"):
-            for doc in response["source_documents"]:
-                st.markdown(f"- {doc.metadata['source']}")
+# -----------------------------
+# Session state
+# -----------------------------
+if "history" not in st.session_state:
+    st.session_state.history = []
+
+if "chat_input" not in st.session_state:
+    st.session_state.chat_input = ""
+
+# -----------------------------
+# Render chat history
+# -----------------------------
+def render_history():
+    st.markdown("<div class='chat-area'>", unsafe_allow_html=True)
+    for role, text in st.session_state.history:
+        cls = "user-msg" if role == "user" else "bot-msg"
+        st.markdown(f"<div class='{cls}'>{text}</div>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+render_history()
+
+# -----------------------------
+# Send message function
+# -----------------------------
+def send_message():
+    user_text = st.session_state.chat_input.strip()
+    if not user_text:
+        return
+    st.session_state.history.append(("user", user_text))
+    reply = query_census(user_text)
+    st.session_state.history.append(("bot", reply))
+    st.session_state.chat_input = ""
+    st.experimental_rerun()
+
+# -----------------------------
+# Input box + send button
+# -----------------------------
+st.text_input(
+    "Your question:",
+    key="chat_input",
+    placeholder="Type your question here..."
+)
+st.button("Send", on_click=send_message)
