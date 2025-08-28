@@ -50,7 +50,7 @@ with st.sidebar:
 
     if st.button("🆕 New Chat"):
         st.session_state.history = []
-        st.rerun()
+        st.session_state.chat_input = ""
 
     if st.button("🔄 Re-index Data"):
         with st.spinner("Re-indexing..."):
@@ -144,6 +144,10 @@ render_history()
 # -----------------------------
 # User input fixed at bottom
 # -----------------------------
+# Ensure chat_input exists in session_state
+if "chat_input" not in st.session_state:
+    st.session_state.chat_input = ""
+
 def process_input(user_input: str):
     st.session_state.history.append(("user", user_input))
     render_history()
@@ -162,7 +166,13 @@ def process_input(user_input: str):
         json.dump(st.session_state.history, f, ensure_ascii=False, indent=2)
 
 # Text input with "Enter to send"
-user_input = st.text_input("", placeholder="Type your question here...", key="chat_input")
+user_input = st.text_input(
+    "", 
+    placeholder="Type your question here...", 
+    key="chat_input"
+)
+
 if user_input:
     process_input(user_input)
-    st.experimental_rerun()  # Refresh so input clears after Enter
+    # Clear input after processing (no rerun needed)
+    st.session_state.chat_input = ""
