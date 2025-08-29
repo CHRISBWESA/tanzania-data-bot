@@ -1,4 +1,3 @@
-# app.py
 import streamlit as st
 import os
 from dotenv import load_dotenv
@@ -7,90 +6,85 @@ from rag_pipeline import query_pipeline, rebuild_index
 # Load environment variables
 load_dotenv()
 
-# Path to the fixed PDF file
+# Path to PDF
 PDF_PATH = "nbs.pdf"
 
-# Initialize session state for messages if not present
+# Initialize session state
 if "messages" not in st.session_state:
     greeting = "Hello! I’m Tanzania Data Bot. I can answer questions about Population & Housing Census 2022. How can I help you today?"
     st.session_state.messages = [{"role": "assistant", "content": greeting}]
 
-# Set page title
+st.set_page_config(page_title="Tanzania Data Bot", page_icon="📊")
 st.title("Tanzania Data Bot")
 
-# Sidebar for example questions and rebuild index
+# Sidebar examples and actions
 st.sidebar.title("Example Questions")
 example_questions = [
+    "Hello",
+    "Hi",
     "What is the total population of Tanzania in 2022?",
-    "Idadi ya watu wa Tanzania ni ngapi mwaka 2022?",
     "How many households are there in Dar es Salaam?",
-    "Viwango vya makazi katika mikoa ya Tanzania ni vipi?",
     "What are the key statistics on dwelling units?"
 ]
 
 for example in example_questions:
     if st.sidebar.button(example):
-        # Add user message to history
         st.session_state.messages.append({"role": "user", "content": example})
-        # Display user message
         with st.chat_message("user"):
             st.markdown(example)
-        # Process query with loading indicator
         with st.spinner("Thinking..."):
-            try:
-                answer, sources = query_pipeline(example)
-            except Exception as e:
-                answer = "Sorry, an error occurred. Please try again."
-                sources = []
-        # Add assistant response to history
+            answer, sources = query_pipeline(example)
         st.session_state.messages.append({"role": "assistant", "content": answer, "sources": sources})
-        # Rerun to update the UI and auto-scroll
         st.rerun()
 
 # Sidebar button to rebuild index
 if st.sidebar.button("Rebuild Index"):
     with st.spinner("Rebuilding index..."):
-        rebuild_index(PDF_PATH)
-    st.sidebar.success("Index rebuilt successfully!")
+        try:
+            rebuild_index(PDF_PATH)
+            st.sidebar.success("Index rebuilt successfully!")
+        except Exception as e:
+            st.sidebar.error(f"Failed to rebuild index: {str(e)}")
+
+# WhatsApp feedback
+st.sidebar.markdown("---")
+st.sidebar.subheader("Feedback")
+st.sidebar.markdown(
+    """
+    <a href="https://wa.me/+255746044144?text=Feedback%20for%20Tanzania%20Data%20Bot" target="_blank">
+        <button style="background-color: #25D366; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer;">
+            Send Feedback via WhatsApp
+        </button>
+    </a>
+    """,
+    unsafe_allow_html=True
+)
 
 # Display chat history
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
-        # If sources are available, show them in an expander
         if "sources" in message and message["sources"]:
             with st.expander("Sources"):
                 for idx, source in enumerate(message["sources"], 1):
-                    st.text(f"Excerpt {idx}: {source[:200]}...")  # Truncate for display
+                    st.text(f"Excerpt {idx}: {source[:200]}...")
 
-# Chat input box
+# Chat input
 user_input = st.chat_input("Ask a question about the Tanzania Population & Housing Census 2022")
 
 if user_input:
-    # Basic input sanitization (strip whitespace)
     user_input = user_input.strip()
     if user_input:
-        # Add user message to history
         st.session_state.messages.append({"role": "user", "content": user_input})
-        # Display user message
         with st.chat_message("user"):
             st.markdown(user_input)
-        # Process query with loading indicator
         with st.spinner("Thinking..."):
-            try:
-                answer, sources = query_pipeline(user_input)
-            except Exception as e:
-                answer = "Sorry, an error occurred. Please try again."
-                sources = []
-        # Add assistant response to history
+            answer, sources = query_pipeline(user_input)
         st.session_state.messages.append({"role": "assistant", "content": answer, "sources": sources})
-        # Rerun to update the UI and auto-scroll
         st.rerun()
 
-# Reset conversation button
+# Reset conversation
 if st.button("Reset Conversation"):
     greeting = "Hello! I’m Tanzania Data Bot. I can answer questions about Population & Housing Census 2022. How can I help you today?"
     st.session_state.messages = [{"role": "assistant", "content": greeting}]
     st.rerun()
-
-# Note: Streamlit handles scrollable chat window, auto-scroll to latest message, and basic mobile responsiveness by default.

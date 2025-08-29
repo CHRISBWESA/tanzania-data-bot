@@ -1,4 +1,3 @@
-# rag_pipeline.py
 import pdfplumber
 from sentence_transformers import SentenceTransformer
 import chromadb
@@ -7,100 +6,99 @@ from dotenv import load_dotenv
 import os
 import logging
 from functools import lru_cache
+from langdetect import detect
+import pandas as pd
+import re
 
-# Set up logging for backend errors
-logging.basicConfig(level=logging.ERROR)
+# Logging
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Load environment variables
+# Load env variables
 load_dotenv()
 
-# Configure Gemini API
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+# Gemini config
+try:
+    genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+except Exception as e:
+    logger.error(f"Failed to configure Gemini API: {e}")
+    raise
 
-# Initialize generative model
 gen_model = genai.GenerativeModel('gemini-1.5-flash')
-
-# Initialize embedding model (multilingual support for English and Kiswahili)
 emb_model = SentenceTransformer('sentence-transformers/LaBSE')
-
-# Initialize Chroma persistent client
 chroma_client = chromadb.PersistentClient(path="./chroma_db")
 
-# Get or create collection with cosine distance for better semantic similarity
 collection = chroma_client.get_or_create_collection(
     name="census_data",
-    metadata={"hnsw:space": "cosine"}  # Cosine distance metric
+    metadata={"hnsw:space": "cosine"}
 )
 
-# Function to extract text and tables from PDF using pdfplumber
+# Greeting detection
+GREETING_PATTERNS = re.compile(r'\b(hi|hello|hey|good morning|good afternoon|good evening)\b', re.I)
+
+# Extract PDF content (include tables as readable text)
 def extract_pdf_content(pdf_path):
-    """
-    Extracts text and tables from the given PDF file.
-    :param pdf_path: Path to the PDF file.
-    :return: Combined text content including tables.
-    """
+    if not os.path.exists(pdf_path):
+        logger.error(f"PDF file not found: {pdf_path}")
+        raise FileNotFoundError(f"PDF file not found: {pdf_path}")
     try:
         text = ""
         with pdfplumber.open(pdf_path) as pdf:
             for page in pdf.pages:
-                # Extract text
                 page_text = page.extract_text()
                 if page_text:
                     text += page_text + "\n"
-                
-                # Extract tables and convert to text
+
+                # Extract tables and convert to readable text
                 tables = page.extract_tables()
                 for table in tables:
-                    for row in table:
-                        text += "\t".join([str(cell) if cell else "" for cell in row]) + "\n"
-                    text += "\n"
+                    if table:
+                        df = pd.DataFrame(table[1:], columns=table[0])
+                        for _, row in df.iterrows():
+                            row_text = ", ".join([f"{col}: {val}" for col, val in row.items()])
+                            text += row_text + "\n"
+        logger.info(f"Extracted content from {pdf_path}")
         return text
     except Exception as e:
         logger.error(f"Error extracting PDF content: {e}")
         raise
 
-# Function to chunk the text into smaller pieces for embedding
+# Chunk text
 def chunk_text(text, chunk_size=500, overlap=50):
-    """
-    Splits the text into chunks with overlap for better context retention.
-    :param text: Input text.
-    :param chunk_size: Size of each chunk.
-    :param overlap: Overlap between chunks.
-    :return: List of text chunks.
-    """
     chunks = []
     for i in range(0, len(text), chunk_size - overlap):
         chunks.append(text[i:i + chunk_size])
+    logger.info(f"Created {len(chunks)} chunks")
     return chunks
 
-# Function to index the PDF content into Chroma
+# Index PDF
 def index_pdf(pdf_path):
-    """
-    Processes the PDF, chunks it, generates embeddings, and stores in Chroma.
-    :param pdf_path: Path to the PDF file.
-    """
     try:
+        if collection.count() > 0:
+            logger.info("Collection already populated, skipping re-indexing.")
+            return
         text = extract_pdf_content(pdf_path)
         chunks = chunk_text(text)
-        embeddings = emb_model.encode(chunks).tolist()  # Convert to list for Chroma
+        if not chunks:
+            raise ValueError("No content extracted from PDF")
+        batch_size = 16
+        embeddings = []
+        for i in range(0, len(chunks), batch_size):
+            batch = chunks[i:i + batch_size]
+            embeddings.extend(emb_model.encode(batch).tolist())
         ids = [str(i) for i in range(len(chunks))]
         collection.upsert(
             ids=ids,
             embeddings=embeddings,
             documents=chunks
         )
-        logger.info("PDF indexed successfully.")
+        logger.info(f"Indexed {len(chunks)} chunks into Chroma")
     except Exception as e:
         logger.error(f"Error indexing PDF: {e}")
         raise
 
-# Function to rebuild the index by deleting and re-indexing
+# Rebuild index
 def rebuild_index(pdf_path):
-    """
-    Deletes the existing collection and rebuilds the index from scratch.
-    :param pdf_path: Path to the PDF file.
-    """
     try:
         chroma_client.delete_collection("census_data")
         global collection
@@ -109,21 +107,17 @@ def rebuild_index(pdf_path):
             metadata={"hnsw:space": "cosine"}
         )
         index_pdf(pdf_path)
+        logger.info("Index rebuilt successfully")
     except Exception as e:
         logger.error(f"Error rebuilding index: {e}")
         raise
 
-# Function to retrieve relevant chunks based on query embedding
-def retrieve_chunks(query, top_k=5, distance_threshold=0.8):
-    """
-    Embeds the query and retrieves top_k relevant chunks from Chroma.
-    Filters by distance threshold to ensure relevance.
-    :param query: User query.
-    :param top_k: Number of chunks to retrieve.
-    :param distance_threshold: Max cosine distance for relevance (lower is better).
-    :return: List of relevant documents and their distances.
-    """
+# Retrieve chunks
+def retrieve_chunks(query, top_k=5, distance_threshold=0.7):
     try:
+        if collection.count() == 0:
+            logger.error("Chroma collection is empty. Please rebuild the index.")
+            return [], []
         query_emb = emb_model.encode(query).tolist()
         results = collection.query(
             query_embeddings=[query_emb],
@@ -131,52 +125,41 @@ def retrieve_chunks(query, top_k=5, distance_threshold=0.8):
         )
         documents = results['documents'][0]
         distances = results['distances'][0]
-        # Filter relevant chunks
         relevant = [(doc, dist) for doc, dist in zip(documents, distances) if dist < distance_threshold]
         return [doc for doc, _ in relevant], [dist for _, dist in relevant]
     except Exception as e:
         logger.error(f"Error retrieving chunks: {e}")
         return [], []
 
-# Function to generate answer using Gemini
+# Generate answer using Gemini
 def generate_answer(query, chunks):
-    """
-    Generates a concise answer using the generative model based on retrieved chunks.
-    Falls back to raw chunks if model fails.
-    :param query: User query.
-    :param chunks: List of relevant document chunks.
-    :return: Generated answer.
-    """
     if not chunks:
-        return "I'm sorry, but I can only answer questions about the Tanzania Population & Housing Census 2022."
-    
+        return "I'm sorry, I can only answer questions about the Tanzania Population & Housing Census 2022. Please ensure the index is built."
+
+    # Handle greetings
+    if GREETING_PATTERNS.search(query):
+        return "Hello! I’m Tanzania Data Bot. I can answer questions about the Population & Housing Census 2022. How can I help you today?"
+
     context = "\n\n".join(chunks)
     prompt = (
-        "Answer the question concisely in 2-5 sentences about the Tanzania Population & Housing Census 2022 "
-        "using the following context. Use bullet points for exact figures if present. "
+        "Answer in English only. Summarize any table content clearly in text form. "
+        "Provide a concise 2-4 sentence answer based on the Tanzania Population & Housing Census 2022. "
         f"Question: {query}\nContext: {context}"
     )
-    
     try:
         response = gen_model.generate_content(prompt)
         return response.text.strip()
     except Exception as e:
         logger.error(f"Error generating answer with Gemini: {e}")
-        # Fallback to extracted text
-        return "Fallback response (model unavailable):\n" + "\n".join(chunks[:2])
+        return f"Fallback response:\n" + "\n".join(chunks[:2])
 
-# Cached query pipeline for last 5 queries
-@lru_cache(maxsize=5)
+# Cached pipeline
+@lru_cache(maxsize=15)
 def query_pipeline(query):
-    """
-    Full RAG pipeline: Retrieve relevant chunks and generate answer.
-    :param query: User query (supports English, Kiswahili, mixed).
-    :return: Answer and list of source excerpts.
-    """
     try:
-        chunks, _ = retrieve_chunks(query)
+        chunks, distances = retrieve_chunks(query)
         answer = generate_answer(query, chunks)
-        return answer, chunks  # Return answer and sources
+        return answer, chunks
     except Exception as e:
         logger.error(f"Error in query pipeline: {e}")
         return "Sorry, an error occurred while processing your query.", []
