@@ -1,90 +1,76 @@
+# app.py
 import streamlit as st
 import os
 from dotenv import load_dotenv
-from rag_pipeline import query_pipeline, rebuild_index
+from rag_pipeline import process_query, initialize
 
 # Load environment variables
 load_dotenv()
 
-# Path to PDF
-PDF_PATH = "nbs.pdf"
+# Initialize session state for conversation history
+if 'messages' not in st.session_state:
+    st.session_state.messages = []
 
-# Initialize session state
-if "messages" not in st.session_state:
-    greeting = "Hello! I’m Tanzania Data Bot. I can answer questions about Population & Housing Census 2022. How can I help you today?"
-    st.session_state.messages = [{"role": "assistant", "content": greeting}]
+# Function to reset conversation
+def reset_conversation():
+    st.session_state.messages = []
 
-st.set_page_config(page_title="Tanzania Data Bot", page_icon="📊")
-st.title("Tanzania Data Bot")
+# Streamlit UI Configuration
+st.set_page_config(page_title="Tanzania Data Bot", page_icon="🇹🇿", layout="wide")
 
-# Sidebar examples and actions
-st.sidebar.title("Example Questions")
-example_questions = [
-    "Hello",
-    "Hi",
-    "What is the total population of Tanzania in 2022?",
-    "How many households are there in Dar es Salaam?",
-    "What are the key statistics on dwelling units?"
-]
-
-for example in example_questions:
-    if st.sidebar.button(example):
-        st.session_state.messages.append({"role": "user", "content": example})
-        with st.chat_message("user"):
-            st.markdown(example)
-        with st.spinner("Thinking..."):
-            answer, sources = query_pipeline(example)
-        st.session_state.messages.append({"role": "assistant", "content": answer, "sources": sources})
-        st.rerun()
-
-# Sidebar button to rebuild index
-if st.sidebar.button("Rebuild Index"):
-    with st.spinner("Rebuilding index..."):
+# Sidebar for controls
+with st.sidebar:
+    st.title("Tanzania Data Bot")
+    st.markdown("Powered by Tanzania Population & Housing Census 2022 Data")
+    if st.button("Reset Conversation"):
+        reset_conversation()
+    if st.button("Index Data"):
         try:
-            rebuild_index(PDF_PATH)
-            st.sidebar.success("Index rebuilt successfully!")
+            initialize(force=True)
+            st.success("Data indexed successfully!")
         except Exception as e:
-            st.sidebar.error(f"Failed to rebuild index: {str(e)}")
+            st.error(f"Error indexing data: {str(e)}")
+    st.markdown("---")
+    st.markdown("### Example Questions:")
+    st.markdown("- What is the population of Dar es Salaam?")
+    st.markdown("- List top 10 regions by population")
+    st.markdown("- Idadi ya watu katika Dodoma?")
+    st.markdown("- Which region has more buildings: Arusha or Mwanza?")
+    st.markdown("- Top 10 regions by schools")
+    st.markdown("---")
+    feedback_url = "https://wa.me/255746044144"
+    st.markdown(f"[Provide Feedback]({feedback_url})")
 
-# WhatsApp feedback
-st.sidebar.markdown("---")
-st.sidebar.subheader("Feedback")
-st.sidebar.markdown(
-    """
-    <a href="https://wa.me/+255746044144?text=Feedback%20for%20Tanzania%20Data%20Bot" target="_blank">
-        <button style="background-color: #25D366; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer;">
-            Send Feedback via WhatsApp
-        </button>
-    </a>
-    """,
-    unsafe_allow_html=True
-)
+# Main chat interface
+st.title("Tanzania Data Bot MVP")
+st.markdown("Ask questions about the 2022 Population & Housing Census in English or Kiswahili.")
 
-# Display chat history
+# Display conversation history
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
         if "sources" in message and message["sources"]:
-            with st.expander("Sources"):
-                for idx, source in enumerate(message["sources"], 1):
-                    st.text(f"Excerpt {idx}: {source[:200]}...")
+            with st.expander("Sources/Excerpts"):
+                st.json(message["sources"])
 
-# Chat input
-user_input = st.chat_input("Ask a question about the Tanzania Population & Housing Census 2022")
-
-if user_input:
-    user_input = user_input.strip()
-    if user_input:
-        st.session_state.messages.append({"role": "user", "content": user_input})
-        with st.chat_message("user"):
-            st.markdown(user_input)
-        with st.spinner("Thinking..."):
-            answer, sources = query_pipeline(user_input)
-        st.session_state.messages.append({"role": "assistant", "content": answer, "sources": sources})
-        st.rerun()
-
-# Reset conversation
-if st.button("Reset Conversation"):
-    greeting = "Hello! I’m Tanzania Data Bot. I can answer questions about Population & Housing Census 2022. How can I help you today?"
-    st.session_state.messages = [{"role": "assistant", "content": greeting}]
-    st.rerun()
+# User input
+if prompt := st.chat_input("Type your question here..."):
+    # Add user message to history
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
+    
+    # Process the query
+    try:
+        response, sources = process_query(prompt)
+    except Exception as e:
+        response = f"Error processing query: {str(e)}"
+        sources = None
+    
+    # Add bot response to history
+    st.session_state.messages.append({"role": "assistant", "content": response, "sources": sources})
+    with st.chat_message("assistant"):
+        st.markdown(response)
+        if sources:
+            with st.expander("Sources/Excerpts"):
+                st.json(sources)

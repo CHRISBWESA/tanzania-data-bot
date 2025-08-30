@@ -1,0 +1,246 @@
+{
+  "tanzania_census_2022": {
+    "key_indicators": {
+      "population": {
+        "total": 61741120,
+        "mainland": 59851347,
+        "zanzibar": 1889773,
+        "male": 30053130,
+        "female": 31687990,
+        "sex_ratio": 95,
+        "growth_rate": 3.2
+      },
+      "buildings": {
+        "total": 14348372,
+        "multi_storey": 68724,
+        "single_storey": 13540363,
+        "under_construction": 739285,
+        "with_physical_address": 10751123,
+        "without_physical_address": 3597249
+      },
+      "health_facilities": {
+        "total": 10107,
+        "dispensary": 7965,
+        "health_centre": 1466,
+        "hospital": 676
+      },
+      "schools": {
+        "total": 25626,
+        "primary": 19769,
+        "secondary": 5857
+      }
+    },
+    "regions": [
+      {
+        "name": "Dodoma",
+        "population": {"total": 3085625, "male": 1512760, "female": 1572865},
+        "buildings": {"total": 836909, "multi_storey": 1461, "single_storey": 794209, "under_construction": 41239, "with_physical_address": 530200, "without_physical_address": 306709},
+        "health_facilities": {"dispensary": 402, "health_centre": 69, "hospital": 26},
+        "schools": {"primary": 827, "secondary": 233}
+      },
+      {
+        "name": "Arusha",
+        "population": {"total": 2356255, "male": 1125616, "female": 1230639},
+        "buildings": {"total": 553702, "multi_storey": 7180, "single_storey": 515560, "under_construction": 30962, "with_physical_address": 414000, "without_physical_address": 139702},
+        "health_facilities": {"dispensary": 310, "health_centre": 76, "hospital": 43},
+        "schools": {"primary": 833, "secondary": 269}
+      },
+      {
+        "name": "Kilimanjaro",
+        "population": {"total": 1861934, "male": 907636, "female": 954298},
+        "buildings": {"total": 515091, "multi_storey": 3540, "single_storey": 486916, "under_construction": 24635, "with_physical_address": 415000, "without_physical_address": 100091},
+        "health_facilities": {"dispensary": 362, "health_centre": 66, "hospital": 33},
+        "schools": {"primary": 999, "secondary": 349}
+      },
+      {
+        "name": "Tanga",
+        "population": {"total": 2615597, "male": 1275665, "female": 1339932},
+        "buildings": {"total": 676397, "multi_storey": 4282, "single_storey": 638604, "under_construction": 33511, "with_physical_address": 540000, "without_physical_address": 136397},
+        "health_facilities": {"dispensary": 412, "health_centre": 64, "hospital": 22},
+        "schools": {"primary": 1083, "secondary": 298}
+      },
+      {
+        "name": "Morogoro",
+        "population": {"total": 3197104, "male": 1579869, "female": 1617235},
+        "buildings": {"total": 762454, "multi_storey": 1331, "single_storey": 724320, "under_construction": 36803, "with_physical_address": 600000, "without_physical_address": 162454},
+        "health_facilities": {"dispensary": 415, "health_centre": 73, "hospital": 44},
+        "schools": {"primary": 996, "secondary": 281}
+      },
+      {
+        "name": "Pwani",
+        "population": {"total": 2024947, "male": 998616, "female": 1026331},
+        "buildings": {"total": 504979, "multi_storey": 1885, "single_storey": 468005, "under_construction": 35089, "with_physical_address": 400000, "without_physical_address": 104979},
+        "health_facilities": {"dispensary": 365, "health_centre": 57, "hospital": 22},
+        "schools": {"primary": 713, "secondary": 219}
+      },
+      {
+        "name": "Dar es Salaam",
+        "population": {"total": 5383728, "male": 2600018, "female": 2783710},
+        "buildings": {"total": 913707, "multi_storey": 32219, "single_storey": 827644, "under_construction": 53844, "with_physical_address": 700000, "without_physical_address": 213707},
+        "health_facilities": {"dispensary": 454, "health_centre": 154, "hospital": 76},
+        "schools": {"primary": 838, "secondary": 350}
+      },
+      {
+        "name": "Lindi",
+        "population": {"total": 1194028, "male": 582120, "female": 611908},
+        "buildings": {"total": 341398, "multi_storey": 327, "single_storey": 326065, "under_construction": 15006, "with_physical_address": 275000, "without_physical_address": 66398},
+        "health_facilities": {"dispensary": 253, "health_centre": 34, "hospital": 16},
+        "schools": {"primary": 530, "secondary": 133}
+      },
+      {
+        "name": "Mtwara",
+        "population": {"total": 1634947, "male": 776782, "female": 858165},
+        "buildings": {"total": 511336, "multi_storey": 507, "single_storey": 488078, "under_construction": 22751, "with_physical_address": 450000, "without_physical_address": 61336},
+        "health_facilities": {"dispensary": 257, "health_centre": 38, "hospital": 17},
+        "schools": {"primary": 692, "secondary": 165}
+      },
+      {
+        "name": "Ruvuma",
+        "population": {"total": 1848794, "male": 902298, "female": 946496},
+        "buildings": {"total": 448328, "multi_storey": 408, "single_storey": 434989, "under_construction": 12931, "with_physical_address": 370000, "without_physical_address": 78328},
+        "health_facilities": {"dispensary": 307, "health_centre": 50, "hospital": 25},
+        "schools": {"primary": 829, "secondary": 217}
+      },
+      {
+        "name": "Iringa",
+        "population": {"total": 1192728, "male": 574313, "female": 618415},
+        "buildings": {"total": 357777, "multi_storey": 529, "single_storey": 339561, "under_construction": 17687, "with_physical_address": 300000, "without_physical_address": 57777},
+        "health_facilities": {"dispensary": 283, "health_centre": 47, "hospital": 19},
+        "schools": {"primary": 544, "secondary": 191}
+      },
+      {
+        "name": "Mbeya",
+        "population": {"total": 2343754, "male": 1123828, "female": 1219926},
+        "buildings": {"total": 623054, "multi_storey": 1073, "single_storey": 592896, "under_construction": 29085, "with_physical_address": 550000, "without_physical_address": 73054},
+        "health_facilities": {"dispensary": 336, "health_centre": 73, "hospital": 34},
+        "schools": {"primary": 807, "secondary": 266}
+      },
+      {
+        "name": "Singida",
+        "population": {"total": 2008058, "male": 995703, "female": 1012355},
+        "buildings": {"total": 463353, "multi_storey": 290, "single_storey": 440541, "under_construction": 22522, "with_physical_address": 370000, "without_physical_address": 93353},
+        "health_facilities": {"dispensary": 229, "health_centre": 30, "hospital": 23},
+        "schools": {"primary": 630, "secondary": 167}
+      },
+      {
+        "name": "Tabora",
+        "population": {"total": 3391679, "male": 1661171, "female": 1730508},
+        "buildings": {"total": 680103, "multi_storey": 400, "single_storey": 648178, "under_construction": 31525, "with_physical_address": 500000, "without_physical_address": 180103},
+        "health_facilities": {"dispensary": 337, "health_centre": 40, "hospital": 24},
+        "schools": {"primary": 875, "secondary": 212}
+      },
+      {
+        "name": "Rukwa",
+        "population": {"total": 1540519, "male": 743119, "female": 797400},
+        "buildings": {"total": 302368, "multi_storey": 173, "single_storey": 290707, "under_construction": 11488, "with_physical_address": 198000, "without_physical_address": 104368},
+        "health_facilities": {"dispensary": 228, "health_centre": 37, "hospital": 11},
+        "schools": {"primary": 394, "secondary": 97}
+      },
+      {
+        "name": "Kigoma",
+        "population": {"total": 2470967, "male": 1186833, "female": 1284134},
+        "buildings": {"total": 458567, "multi_storey": 318, "single_storey": 444481, "under_construction": 13768, "with_physical_address": 380000, "without_physical_address": 78567},
+        "health_facilities": {"dispensary": 246, "health_centre": 46, "hospital": 20},
+        "schools": {"primary": 701, "secondary": 219}
+      },
+      {
+        "name": "Shinyanga",
+        "population": {"total": 2241299, "male": 1102879, "female": 1138420},
+        "buildings": {"total": 421743, "multi_storey": 358, "single_storey": 398581, "under_construction": 22804, "with_physical_address": 345000, "without_physical_address": 76743},
+        "health_facilities": {"dispensary": 250, "health_centre": 46, "hospital": 15},
+        "schools": {"primary": 671, "secondary": 172}
+      },
+      {
+        "name": "Kagera",
+        "population": {"total": 2989299, "male": 1459280, "female": 1530019},
+        "buildings": {"total": 716458, "multi_storey": 701, "single_storey": 684987, "under_construction": 30770, "with_physical_address": 598000, "without_physical_address": 118458},
+        "health_facilities": {"dispensary": 357, "health_centre": 51, "hospital": 27},
+        "schools": {"primary": 833, "secondary": 241}
+      },
+      {
+        "name": "Mwanza",
+        "population": {"total": 3516784, "male": 1713264, "female": 1803520},
+        "buildings": {"total": 851234, "multi_storey": 5210, "single_storey": 794024, "under_construction": 52000, "with_physical_address": 700000, "without_physical_address": 151234},
+        "health_facilities": {"dispensary": 469, "health_centre": 89, "hospital": 34},
+        "schools": {"primary": 945, "secondary": 294}
+      },
+      {
+        "name": "Mara",
+        "population": {"total": 1649495, "male": 816222, "female": 833273},
+        "buildings": {"total": 392101, "multi_storey": 280, "single_storey": 374321, "under_construction": 17750, "with_physical_address": 310000, "without_physical_address": 82001},
+        "health_facilities": {"dispensary": 234, "health_centre": 33, "hospital": 11},
+        "schools": {"primary": 540, "secondary": 149}
+      },
+      {
+        "name": "Manyara",
+        "population": {"total": 1470917, "male": 714115, "female": 756802},
+        "buildings": {"total": 327854, "multi_storey": 232, "single_storey": 315472, "under_construction": 12410, "with_physical_address": 250000, "without_physical_address": 77854},
+        "health_facilities": {"dispensary": 224, "health_centre": 32, "hospital": 12},
+        "schools": {"primary": 495, "secondary": 138}
+      },
+      {
+        "name": "Njombe",
+        "population": {"total": 1021659, "male": 501413, "female": 520246},
+        "buildings": {"total": 224875, "multi_storey": 153, "single_storey": 212462, "under_construction": 8260, "with_physical_address": 160000, "without_physical_address": 64875},
+        "health_facilities": {"dispensary": 182, "health_centre": 29, "hospital": 9},
+        "schools": {"primary": 352, "secondary": 87}
+      },
+      {
+        "name": "Katavi",
+        "population": {"total": 99700, "male": 48901, "female": 50799},
+        "buildings": {"total": 21054, "multi_storey": 23, "single_storey": 20909, "under_construction": 122, "with_physical_address": 15000, "without_physical_address": 6054},
+        "health_facilities": {"dispensary": 18, "health_centre": 3, "hospital": 1},
+        "schools": {"primary": 55, "secondary": 12}
+      },
+      {
+        "name": "Simiyu",
+        "population": {"total": 1231537, "male": 608201, "female": 623336},
+        "buildings": {"total": 260195, "multi_storey": 211, "single_storey": 252514, "under_construction": 5470, "with_physical_address": 200000, "without_physical_address": 60195},
+        "health_facilities": {"dispensary": 167, "health_centre": 25, "hospital": 8},
+        "schools": {"primary": 368, "secondary": 99}
+      },
+      {
+        "name": "Geita",
+        "population": {"total": 1511080, "male": 731178, "female": 780902},
+        "buildings": {"total": 308475, "multi_storey": 191, "single_storey": 306110, "under_construction": 2174, "with_physical_address": 250000, "without_physical_address": 58475},
+        "health_facilities": {"dispensary": 195, "health_centre": 22, "hospital": 10},
+        "schools": {"primary": 421, "secondary": 102}
+      },
+      {
+        "name": "Songwe",
+        "population": {"total": 1096449, "male": 534122, "female": 562327},
+        "buildings": {"total": 225784, "multi_storey": 145, "single_storey": 224127, "under_construction": 1512, "with_physical_address": 170000, "without_physical_address": 55784},
+        "health_facilities": {"dispensary": 150, "health_centre": 18, "hospital": 5},
+        "schools": {"primary": 306, "secondary": 76}
+      },
+      {
+        "name": "Zanzibar Urban",
+        "population": {"total": 593678, "male": 285123, "female": 308555},
+        "buildings": {"total": 154372, "multi_storey": 256, "single_storey": 153000, "under_construction": 1116, "with_physical_address": 120000, "without_physical_address": 34372},
+        "health_facilities": {"dispensary": 46, "health_centre": 11, "hospital": 6},
+        "schools": {"primary": 182, "secondary": 67}
+      },
+      {
+        "name": "Zanzibar West",
+        "population": {"total": 515095, "male": 248050, "female": 267045},
+        "buildings": {"total": 132573, "multi_storey": 198, "single_storey": 132000, "under_construction": 375, "with_physical_address": 100000, "without_physical_address": 32573},
+        "health_facilities": {"dispensary": 39, "health_centre": 10, "hospital": 5},
+        "schools": {"primary": 150, "secondary": 55}
+      },
+      {
+        "name": "Zanzibar North",
+        "population": {"total": 441000, "male": 215500, "female": 225500},
+        "buildings": {"total": 108905, "multi_storey": 105, "single_storey": 108800, "under_construction": 200, "with_physical_address": 90000, "without_physical_address": 18905},
+        "health_facilities": {"dispensary": 35, "health_centre": 8, "hospital": 4},
+        "schools": {"primary": 140, "secondary": 52}
+      },
+      {
+        "name": "Zanzibar South",
+        "population": {"total": 340000, "male": 165000, "female": 175000},
+        "buildings": {"total": 80245, "multi_storey": 55, "single_storey": 80190, "under_construction": 100, "with_physical_address": 65000, "without_physical_address": 15245},
+        "health_facilities": {"dispensary": 28, "health_centre": 5, "hospital": 2},
+        "schools": {"primary": 120, "secondary": 45}
+      }
+    ]
+  }
+}
