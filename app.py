@@ -1,4 +1,3 @@
-# app.py (unchanged)
 import streamlit as st
 import os
 from dotenv import load_dotenv
@@ -74,3 +73,7 @@ if prompt := st.chat_input("Type your question here..."):
         if sources:
             with st.expander("Sources/Excerpts"):
                 st.json(sources)
+
+# Footer credit
+st.markdown("---")
+st.markdown("<center>Developed by Chris Bwesa & Fedelika Maxmus</center>", unsafe_allow_html=True)
