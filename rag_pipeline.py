@@ -125,15 +125,17 @@ def cosine_sim_search(query: str, top_k: int = 5) -> List[Dict]:
     tfidf_sims = cosine_similarity(query_vec, TFIDF_MATRIX).flatten()
     top_indices = np.argsort(tfidf_sims)[-top_k:]
     
-    # Combine results
+    # Combine results, prioritize stat matches
     relevant_chunks = []
-    for region, score in sorted_regions:
-        if score > 0.5:  # Threshold
-            relevant_chunks.append({"region": region, "score": score})
-    
     for idx in top_indices:
         if tfidf_sims[idx] > 0.1:
             relevant_chunks.append(FLAT_STATS[idx])
+    
+    # Add region-only chunks only if no specific stat matches
+    if not relevant_chunks:
+        for region, score in sorted_regions:
+            if score > 0.5:
+                relevant_chunks.append({"region": region, "stat_category": "population", "stat_key": "total"})
     
     return relevant_chunks[:top_k]
 
@@ -144,12 +146,17 @@ def agentic_rag(query: str) -> List[Dict]:
     """
     try:
         model = genai.GenerativeModel(GEMINI_MODEL)
+        stat_categories = ["population (total, male, female)", 
+                          "buildings (total, multi_storey, single_storey, under_construction, with_physical_address, without_physical_address)",
+                          "health_facilities (dispensary, health_centre, hospital)",
+                          "schools (primary, secondary)"]
         prompt = f"""
         Given the user query: "{query}"
         And available regions: {', '.join(REGIONS)}
-        And stats: population (total, male, female), buildings (total, multi_storey, single_storey, under_construction, with_physical_address, without_physical_address), health_facilities (dispensary, health_centre, hospital), schools (primary, secondary)
+        And stats: {', '.join(stat_categories)}
+        And national key indicators: population, buildings, health_facilities, schools
         
-        Decide which regions and stats are relevant.
+        Decide which regions, stat categories, and stat keys are relevant (e.g., 'Tanzania' for national stats).
         Output as JSON list of dicts like [{"region": "Dar es Salaam", "stat_category": "population", "stat_key": "total"}]
         """
         response = model.generate_content(prompt)
@@ -172,7 +179,11 @@ def perform_calculations(chunks: List[Dict], query: str) -> Dict:
         region = chunk.get("region")
         stat_category = chunk.get("stat_category", "population")
         stat_key = chunk.get("stat_key", "total")
-        if region in region_dict and stat_category in region_dict[region] and stat_key in region_dict[region][stat_category]:
+        
+        if region == "Tanzania" and stat_category in DATA.get("key_indicators", {}):
+            value = DATA["key_indicators"][stat_category].get(stat_key, 0)
+            values[f"{region}_{stat_category}_{stat_key}"] = value
+        elif region in region_dict and stat_category in region_dict[region] and stat_key in region_dict[region][stat_category]:
             value = region_dict[region][stat_category][stat_key]
             values[f"{region}_{stat_category}_{stat_key}"] = value
     
@@ -182,10 +193,10 @@ def perform_calculations(chunks: List[Dict], query: str) -> Dict:
         # Ranking
         n = int(re.search(r'top (\d+)', query_lower).group(1)) if re.search(r'top (\d+)', query_lower) else 5
         stat_match = re.search(r'by (\w+)', query_lower)
-        stat_category = stat_match.group(1) if stat_match and stat_match.group(1) in ["population", "buildings", "health_facilities", "schools"] else "population"
+        stat_category = stat_match.group(1) if stat_match and stat_match.group(1) in ["population", "buildings", "health_facilities", "schools", "hospital"] else "population"
         stat_key = "total"
         
-        # Special handling for schools (sum primary + secondary)
+        # Special handling for schools and health facilities
         if stat_category == "schools":
             all_values = []
             for r in REGIONS:
@@ -193,6 +204,14 @@ def perform_calculations(chunks: List[Dict], query: str) -> Dict:
                 secondary = region_dict[r].get("schools", {}).get("secondary", 0)
                 total_schools = primary + secondary
                 all_values.append((r, total_schools))
+        elif stat_category == "hospital":
+            stat_category = "health_facilities"
+            stat_key = "hospital"
+            all_values = [(r, region_dict[r].get("health_facilities", {}).get("hospital", 0)) for r in REGIONS]
+        elif stat_category in ["health_facilities", "dispensary", "health_centre"]:
+            stat_category = "health_facilities"
+            stat_key = stat_category if stat_category in ["dispensary", "health_centre"] else "total"
+            all_values = [(r, region_dict[r].get("health_facilities", {}).get(stat_key, 0)) for r in REGIONS]
         else:
             stat_key_match = re.search(r'by (\w+ \w+)', query_lower)
             stat_key = stat_key_match.group(1).replace(" ", "_") if stat_key_match else "total"
@@ -203,11 +222,19 @@ def perform_calculations(chunks: List[Dict], query: str) -> Dict:
     
     elif "list all" in query_lower or "all regions" in query_lower:
         # Listing
-        stat_match = re.search(r'(population|buildings|health_facilities|schools)', query_lower)
+        stat_match = re.search(r'(population|buildings|health_facilities|schools|hospital|dispensary|health_centre)', query_lower)
         stat_category = stat_match.group(1) if stat_match else "population"
         stat_key = "total"
         if stat_category == "schools":
             all_values = [(r, region_dict[r].get("schools", {}).get("primary", 0) + region_dict[r].get("schools", {}).get("secondary", 0)) for r in REGIONS]
+        elif stat_category == "hospital":
+            stat_category = "health_facilities"
+            stat_key = "hospital"
+            all_values = [(r, region_dict[r].get("health_facilities", {}).get("hospital", 0)) for r in REGIONS]
+        elif stat_category in ["dispensary", "health_centre"]:
+            stat_category = "health_facilities"
+            stat_key = stat_category
+            all_values = [(r, region_dict[r].get("health_facilities", {}).get(stat_key, 0)) for r in REGIONS]
         else:
             stat_key_match = re.search(r'(total|multi_storey|single_storey|under_construction|with_physical_address|without_physical_address|dispensary|health_centre|hospital|primary|secondary)', query_lower)
             stat_key = stat_key_match.group(1) if stat_key_match else "total"
@@ -268,11 +295,11 @@ def generate_response(query: str, chunks: List[Dict], calc_result: Dict) -> str:
         print(f"Gemini response generation failed: {str(e)}")
         # Fallback response
         if calc_result["type"] == "values":
-            return "\n".join([f"{k.replace('_', ' ')}: {v} (2022)" for k, v in calc_result["data"].items()])
+            return "\n".join([f"{k.replace('_', ' ')}: {v:,} (2022)" for k, v in calc_result["data"].items()])
         elif calc_result["type"] == "ranking":
-            return "\n".join([f"- {r}: {v:,} (2022)" for r, v in calc_result["data"]])
+            return "Top regions in 2022:\n" + "\n".join([f"- {r}: {v:,}" for r, v in calc_result["data"]])
         elif calc_result["type"] == "listing":
-            return "\n".join([f"- {r}: {v:,} (2022)" for r, v in calc_result["data"]])
+            return "Regions in 2022:\n" + "\n".join([f"- {r}: {v:,}" for r, v in calc_result["data"]])
         elif calc_result["type"] == "sum":
             return f"Total: {calc_result['data']:,} (2022)"
         elif calc_result["type"] == "difference":
@@ -312,7 +339,7 @@ def process_query(query: str) -> Tuple[str, Any]:
         return greeting_resp, None
     
     # Check off-topic
-    census_keywords = ["population", "people", "watu", "buildings", "majengo", "health", "afya", "schools", "shule", "region", "mkoa", "census", "sensa"]
+    census_keywords = ["population", "people", "watu", "buildings", "majengo", "health", "afya", "schools", "shule", "region", "mkoa", "census", "sensa", "hospital", "health facilities"]
     if not any(k in query.lower() for k in census_keywords):
         return "Sorry, I only answer questions about the Tanzania Population & Housing Census 2022.", None
     
