@@ -6,7 +6,7 @@ from rag_pipeline import process_query, initialize
 # Load environment variables
 load_dotenv()
 
-# Initialize session state for conversation history
+# Initialize session state for conversation histor
 if 'messages' not in st.session_state:
     st.session_state.messages = []
 
